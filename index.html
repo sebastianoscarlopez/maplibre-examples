@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Display a map</title>
+    <meta
+      name="viewport"
+      content="initial-scale=1,maximum-scale=1,user-scalable=no"
+    />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+    <script src="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.js"></script>
+    <link
+      href="https://unpkg.com/maplibre-gl@2.4.0/dist/maplibre-gl.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      #map {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="map"></div>
+    <script>
+      var map = new maplibregl.Map({
+        container: "map", // container id
+        style: "https://demotiles.maplibre.org/style.json", // style URL
+        center: [0, 0], // starting position [lng, lat]
+        zoom: 1, // starting zoom
+      });
+
+      map.on("load", () => {
+        console.log("loaded");
+
+        const getApiUrl = () => "https://geoportal.cepal.org/geoserver";
+
+        const getGeoBuffer = ({ geometry, distance } = {}) => ({
+          url: `${getApiUrl()}/wps?service=WPS&outputFormat=geojson`,
+          method: "POST",
+          mode: "cors",
+          credentials: "omit",
+          body: `<?xml version="1.0" encoding="UTF-8"?>
+<wps:Execute version="1.0.0" service="WPS" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns="http://www.opengis.net/wps/1.0.0" xmlns:wfs="http://www.opengis.net/wfs" xmlns:wps="http://www.opengis.net/wps/1.0.0" xmlns:ows="http://www.opengis.net/ows/1.1" xmlns:gml="http://www.opengis.net/gml" xmlns:ogc="http://www.opengis.net/ogc" xmlns:wcs="http://www.opengis.net/wcs/1.1.1" xmlns:xlink="http://www.w3.org/1999/xlink" xsi:schemaLocation="http://www.opengis.net/wps/1.0.0 http://schemas.opengis.net/wps/1.0.0/wpsAll.xsd">
+  <ows:Identifier>JTS:buffer</ows:Identifier>
+  <wps:DataInputs>
+    <wps:Input>
+      <ows:Identifier>geom</ows:Identifier>
+      <wps:Data>
+        <wps:ComplexData mimeType="application/wkt"><![CDATA[${geometry}]]></wps:ComplexData>
+      </wps:Data>
+    </wps:Input>
+    <wps:Input>
+      <ows:Identifier>distance</ows:Identifier>
+      <wps:Data>
+        <wps:LiteralData>${distance}</wps:LiteralData>
+      </wps:Data>
+    </wps:Input>
+    <wps:Input>
+      <ows:Identifier>quadrantSegments</ows:Identifier>
+      <wps:Data>
+        <wps:LiteralData>1</wps:LiteralData>
+      </wps:Data>
+    </wps:Input>
+    <wps:Input>
+      <ows:Identifier>capStyle</ows:Identifier>
+      <wps:Data>
+        <wps:LiteralData>flat</wps:LiteralData>
+      </wps:Data>
+    </wps:Input>
+  </wps:DataInputs>
+  <wps:ResponseForm>
+    <wps:RawDataOutput mimeType="application/json">
+      <ows:Identifier>result</ows:Identifier>
+    </wps:RawDataOutput>
+  </wps:ResponseForm>
+</wps:Execute>`,
+        });
+
+        const drawPolygon = "-4782219.0450353725 -2189545.1623659595,-4670577.752500758 -2204430.668037226,-4736073.977454399 -2333934.567377258,-4783707.595602535 -2305652.106601799,-4782219.0450353725 -2189545.1623659595"
+        // [[[-4782219.0450353725, -2189545.1623659595], [-4670577.752500758, -2204430.668037226], [-4736073.977454399, -2333934.567377258], [-4783707.595602535, -2305652.106601799], [-4782219.0450353725, -2189545.1623659595]]]
+        
+        const drawDataGeoJson = turf.toWgs84(turf.polygon(JSON.parse(`[[[${drawPolygon.replace(/\,/g, '],[').replace(/\s/g, ', ')}]]]`)))
+        console.log(drawDataGeoJson)
+
+        map.addSource("drawSource", {
+          type: "geojson",
+          data: drawDataGeoJson
+        });
+        map.addLayer({
+          id: "draw",
+          type: "fill",
+          source: "drawSource",
+          layout: {},
+          paint: {
+            "fill-color": "#22dd22",
+            "fill-opacity": 1.0,
+          },
+        });
+
+        const { url, ...options } = getGeoBuffer({
+          distance: 10000,
+          geometry: `POLYGON((${drawPolygon}))`,
+        });
+        fetch(url, options)
+          .then((response) => response.json())
+          .then(turf.toWgs84)
+          .then((geometry) => {
+            console.log(geometry);
+            map.addSource("bufferSource", {
+              type: "geojson",
+              data: {
+                type: "Feature",
+                geometry,
+              },
+            });
+            map.addLayer({
+              id: "buffer",
+              type: "line",
+              source: "bufferSource",
+              layout: {},
+              paint: {
+                "line-color": "#2222dd",
+              },
+            });
+            map.flyTo({
+              center: geometry.coordinates[0][0],
+              zoom: 7,
+            });
+          });
+          
+      });
+    </script>
+  </body>
+</html>
